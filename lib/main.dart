@@ -6,7 +6,7 @@ import 'package:mqtt_client/mqtt_browser_client.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
-  await dotenv.load(fileName: "../.env");
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
@@ -259,12 +259,16 @@ class _MyHomePageState extends State<MyHomePage> {
     print('Ping response client callback invoked');
   }
 
-  void publishMessage(Map<String, dynamic> message) {
+  void publishMessage(Map<String, dynamic> message) async {
+    if (client.connectionStatus!.state != MqttConnectionState.connected) {
+      await connectToMqtt();
+    }
+
     final builder = MqttClientPayloadBuilder();
     builder.addString(message.toString());
 
-    client.publishMessage(
-        aioFeedUpdate!, MqttQos.exactlyOnce, builder.payload!);
+    client.publishMessage('$aioUsername/feeds/$aioFeedUpdate',
+        MqttQos.exactlyOnce, builder.payload!);
   }
 
   Widget _buildScaffoldWithoutUser() {
