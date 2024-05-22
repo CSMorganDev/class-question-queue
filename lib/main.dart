@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:mqtt_client/mqtt_browser_client.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
+void main() async {
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
@@ -73,6 +78,13 @@ class _MyHomePageState extends State<MyHomePage> {
   final formKey = GlobalKey<FormState>();
   String? name;
   String? studentNumber;
+  String? aioServer = dotenv.env['AIO_SERVER'];
+  String? aioUsername = dotenv.env['AIO_USERNAME'];
+  String? aioKey = dotenv.env['AIO_KEY'];
+  String? aioFeedSubscribe = dotenv.env['AIO_FEED_SUBSCRIBE'];
+  String? aioFeedUpdate = dotenv.env['AIO_FEED_UPDATE'];
+
+  late MqttBrowserClient client;
 
   Future<List> _checkPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -114,6 +126,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _buildScaffoldWithUser() {
+    connectToMqtt();
     final TextEditingController questionController = TextEditingController();
     return Scaffold(
       appBar: AppBar(
@@ -159,6 +172,12 @@ class _MyHomePageState extends State<MyHomePage> {
                               String question = questionController.text;
                               // For now, just print the data
                               print('Question: $question');
+                              Map<String, dynamic> data = {
+                                "question": question,
+                                "name": name,
+                                "student_number": studentNumber,
+                              };
+                              publishMessage(data);
                             }
                           },
                           child: const Text('Submit'),
@@ -173,6 +192,83 @@ class _MyHomePageState extends State<MyHomePage> {
         ],
       ),
     );
+  }
+
+  Future<void> connectToMqtt() async {
+    print('test1');
+    client = MqttBrowserClient.withPort(aioServer!, '', 443);
+    print('test2');
+    client.logging(on: true);
+    print('test3');
+    client.keepAlivePeriod = 60;
+    client.onConnected = onConnected;
+    client.onDisconnected = onDisconnected;
+    client.onSubscribed = onSubscribed;
+    client.onSubscribeFail = onSubscribeFail;
+    client.pongCallback = pong;
+    print('test4');
+    final willMessage = {
+      "name": name,
+      "student_number": studentNumber,
+      "message": "disconnected"
+    };
+
+    final connMessage = MqttConnectMessage()
+        .authenticateAs(aioUsername, aioKey)
+        .withClientIdentifier(studentNumber!)
+        .withWillTopic(aioFeedUpdate!)
+        .withWillMessage(willMessage.toString())
+        .startClean()
+        .withWillQos(MqttQos.atLeastOnce);
+
+    client.connectionMessage = connMessage;
+
+    try {
+      await client.connect();
+    } catch (e) {
+      print('Exception: $e');
+      client.disconnect();
+    }
+
+    if (client.connectionStatus!.state == MqttConnectionState.connected) {
+      print('MQTT client connected');
+    } else {
+      print(
+          'ERROR: MQTT client connection failed - disconnecting, state is ${client.connectionStatus!.state}');
+      client.disconnect();
+    }
+  }
+
+  void onConnected() {
+    print('Connected');
+  }
+
+  void onDisconnected() {
+    print('Disconnected');
+  }
+
+  void onSubscribed(String topic) {
+    print('Subscribed to $topic');
+  }
+
+  void onSubscribeFail(String topic) {
+    print('Failed to subscribe $topic');
+  }
+
+  void pong() {
+    print('Ping response client callback invoked');
+  }
+
+  void publishMessage(Map<String, dynamic> message) async {
+    if (client.connectionStatus!.state != MqttConnectionState.connected) {
+      await connectToMqtt();
+    }
+
+    final builder = MqttClientPayloadBuilder();
+    builder.addString(message.toString());
+
+    client.publishMessage('$aioUsername/feeds/$aioFeedUpdate',
+        MqttQos.exactlyOnce, builder.payload!);
   }
 
   Widget _buildScaffoldWithoutUser() {
