@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mqtt_client/mqtt_client.dart';
@@ -79,19 +80,20 @@ class _MyHomePageState extends State<MyHomePage> {
   String? name;
   String? studentNumber;
   String? aioServer = dotenv.env['AIO_SERVER'];
+  String? aioBrowserServer = dotenv.env['AIO_BROWSER_SERVER'];
   String? aioUsername = dotenv.env['AIO_USERNAME'];
   String? aioKey = dotenv.env['AIO_KEY'];
   String? aioFeedSubscribe = dotenv.env['AIO_FEED_SUBSCRIBE'];
   String? aioFeedUpdate = dotenv.env['AIO_FEED_UPDATE'];
 
-  late MqttBrowserClient client;
+  late dynamic client;
 
   Future<List> _checkPrefs() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    final studentNumberPref = prefs.getString('studentNumber');
-    final namePref = prefs.getString('name');
-    print(namePref);
-    return [namePref, studentNumberPref];
+    studentNumber = prefs.getString('studentNumber');
+    name = prefs.getString('name');
+    print(name);
+    return [name, studentNumber];
   }
 
   @override
@@ -196,7 +198,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> connectToMqtt() async {
     print('test1');
-    client = MqttBrowserClient.withPort(aioServer!, '', 443);
+    if (kIsWeb) {
+      client = MqttBrowserClient.withPort(aioBrowserServer!, '', 443);
+    } else {
+      client = MqttServerClient.withPort(aioServer!, '', 1883);
+    }
+
     print('test2');
     client.logging(on: true);
     print('test3');
@@ -283,7 +290,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Padding(
             padding: const EdgeInsets.only(bottom: 20.0),
             child: Image.asset(
-              'logo.png',
+              'assets/logo.png',
               width: 150,
             ),
           ),
