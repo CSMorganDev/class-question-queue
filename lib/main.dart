@@ -94,6 +94,7 @@ class _MyHomePageState extends State<MyHomePage> {
   late String ticketNumber;
   late String queueNumber;
   bool inQueue = false;
+  bool advice = false;
 
   late dynamic client;
 
@@ -156,10 +157,15 @@ class _MyHomePageState extends State<MyHomePage> {
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Builder(builder: (context) {
-              if (inQueue) {
-                return _inQueueView();
+              if (!advice) {
+                print("In queue ? $inQueue");
+                if (inQueue) {
+                  return _inQueueView();
+                } else {
+                  return _notInQueueView();
+                }
               } else {
-                return _notInQueueView();
+                return _adviceView();
               }
             }),
           ),
@@ -252,6 +258,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void subscribeToFeed(topic) {
+    // advice = false;
     client.subscribe(topic, MqttQos.atLeastOnce);
     client.updates?.listen((List<MqttReceivedMessage<MqttMessage>> c) {
       final MqttPublishMessage recMess = c[0].payload as MqttPublishMessage;
@@ -267,6 +274,17 @@ class _MyHomePageState extends State<MyHomePage> {
           .toList();
       print(data);
       print(myData);
+
+      if (myData[0]['MessageType'] == "0220") {
+        advice = true;
+        setState(() {
+          inQueue = false;
+          ticketNumber = myData[0]['ticketNumber'].toString();
+          queueNumber = '';
+          receivedMessage = '';
+        });
+      }
+
       if (inQueue && myData.isNotEmpty) {
         print('test1');
         setState(() {
@@ -285,7 +303,9 @@ class _MyHomePageState extends State<MyHomePage> {
           queueNumber = '';
           receivedMessage = pt;
         });
-      } else if (!inQueue && myData.isNotEmpty) {
+      } else if (!inQueue &&
+          myData.isNotEmpty &&
+          myData[0]['MessageType'] != "0400") {
         print('test3');
         setState(() {
           inQueue = true;
@@ -391,6 +411,45 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  Widget _adviceView() {
+    String adviceMessage = "It is your turn. Please see your lecturer now";
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5.0),
+              child: Text(
+                'TicketNumber:',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Text(
+                ticketNumber,
+                style: TextStyle(fontSize: 73),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Text(
+                '$adviceMessage',
+                style: TextStyle(fontSize: 24),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _notInQueueView() {
     final TextEditingController questionController = TextEditingController();
     return Card(
@@ -471,6 +530,30 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Text(
                 'You are number $queueNumber in the queue',
                 style: TextStyle(fontSize: 24),
+              ),
+            ),
+            SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  print("Cancel button pressed");
+                  String data =
+                      '[{ "MessageType": "0400", "studentNumber": "$studentNumber"}]';
+                  publishMessage(data);
+                  setState(() {
+                    inQueue = false;
+                    ticketNumber = '';
+                    queueNumber = '';
+                    receivedMessage = '';
+                  });
+                },
+                icon: Icon(Icons.cancel),
+                label: Text('Cancel question'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                ),
               ),
             ),
           ],
