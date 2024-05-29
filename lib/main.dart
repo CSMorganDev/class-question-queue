@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:class_question_queue/models/mqttData.dart';
+import 'package:class_question_queue/models/student.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -91,10 +93,11 @@ class _MyHomePageState extends State<MyHomePage> {
   String receivedMessage = '';
   bool isReconnecting = false;
   String clientIdentifier = '';
-  late String ticketNumber;
-  late String queueNumber;
+  late String? ticketNumber;
+  late String? queueNumber;
   bool inQueue = false;
-  bool advice = false;
+  bool yourTurn = false;
+  bool canceled = false;
 
   late dynamic client;
 
@@ -157,15 +160,11 @@ class _MyHomePageState extends State<MyHomePage> {
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Builder(builder: (context) {
-              if (!advice) {
-                print("In queue ? $inQueue");
-                if (inQueue) {
-                  return _inQueueView();
-                } else {
-                  return _notInQueueView();
-                }
+              print("In queue ? $inQueue");
+              if (inQueue) {
+                return _inQueueView();
               } else {
-                return _adviceView();
+                return _notInQueueView();
               }
             }),
           ),
@@ -265,56 +264,60 @@ class _MyHomePageState extends State<MyHomePage> {
       final String pt =
           MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
       print('Received message:$pt from topic: ${c[0].topic}>');
-      final List data = json.decode(pt);
-      final myData = data
-          .where((element) => element['studentNumber']
-              .toString()
-              .toLowerCase()
-              .contains(studentNumber!.toLowerCase()))
-          .toList();
+      final Map<String, dynamic> jsonData = json.decode(pt);
+      final MQTTData data = MQTTData.fromMap(jsonData);
+      final Student? myData = data.findStudentByNumber(studentNumber);
       print(data);
       print(myData);
 
-      if (myData[0]['MessageType'] == "0220") {
-        advice = true;
+      if (data.messageType == "cancel" &&
+          inQueue &&
+          data.studentNumber == studentNumber) {
         setState(() {
+          canceled = true;
           inQueue = false;
-          ticketNumber = myData[0]['ticketNumber'].toString();
+          yourTurn = false;
+          ticketNumber = '';
           queueNumber = '';
-          receivedMessage = '';
         });
       }
 
-      if (inQueue && myData.isNotEmpty) {
+      if (data.messageType == "next" && inQueue && yourTurn) {
+        setState(() {
+          inQueue = false;
+          yourTurn = false;
+          ticketNumber = '';
+          queueNumber = '';
+        });
+      }
+
+      if (data.messageType == "next" &&
+          inQueue &&
+          data.studentNumber == studentNumber) {
+        setState(() {
+          yourTurn = true;
+        });
+      }
+
+      if (data.messageType == "update" && inQueue && myData != null) {
         print('test1');
         setState(() {
-          ticketNumber = myData[0]['ticketNumber'].toString();
-          queueNumber = (data.indexWhere(
-                      (element) => element['studentNumber'] == studentNumber) +
-                  1)
-              .toString();
-          receivedMessage = pt;
+          ticketNumber = myData.ticketNumber;
+          queueNumber = data.findStudentIndexByNumber(studentNumber);
         });
-      } else if (inQueue && myData.isEmpty) {
+      } else if (data.messageType == "update" && inQueue && myData == null) {
         print('test2');
         setState(() {
           inQueue = false;
           ticketNumber = '';
           queueNumber = '';
-          receivedMessage = pt;
         });
-      } else if (!inQueue &&
-          myData.isNotEmpty &&
-          myData[0]['MessageType'] != "0400") {
+      } else if (!inQueue && myData != null && data.messageType == "update") {
         print('test3');
         setState(() {
           inQueue = true;
-          ticketNumber = myData[0]['ticketNumber'].toString();
-          queueNumber = (data.indexWhere(
-                      (element) => element['studentNumber'] == studentNumber) +
-                  1)
-              .toString();
-          receivedMessage = pt;
+          ticketNumber = myData.ticketNumber;
+          queueNumber = data.findStudentIndexByNumber(studentNumber);
         });
       }
     }, onError: (e) {
@@ -430,7 +433,7 @@ class _MyHomePageState extends State<MyHomePage> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16.0),
               child: Text(
-                ticketNumber,
+                ticketNumber!,
                 style: TextStyle(fontSize: 73),
               ),
             ),
@@ -485,7 +488,10 @@ class _MyHomePageState extends State<MyHomePage> {
                       // For now, just print the data
                       print('Question: $question');
                       String data =
-                          '[{ "ticketNumber": "67", "question": "$question", "name": "$name", "studentNumber": "$studentNumber"}]';
+                          '{"messageType": "update", "queue": [{ "ticketNumber": "67", "question": "$question", "name": "$name", "studentNumber": "$studentNumber"}]}';
+                      setState(() {
+                        canceled = false;
+                      });
                       publishMessage(data);
                     }
                   },
@@ -493,8 +499,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
               Text(
-                'Received Message: $receivedMessage',
-                style: TextStyle(fontSize: 16),
+                canceled
+                    ? 'Your question was canceled by the lecturer and you have been removed from the queue.'
+                    : '',
+                style: const TextStyle(fontSize: 16, color: Colors.red),
               ),
             ],
           ),
@@ -504,6 +512,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _inQueueView() {
+    String yourTurnMessage = "It is your turn. Please see your lecturer now";
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -521,14 +530,16 @@ class _MyHomePageState extends State<MyHomePage> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16.0),
               child: Text(
-                ticketNumber,
+                ticketNumber!,
                 style: TextStyle(fontSize: 73),
               ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16.0),
               child: Text(
-                'You are number $queueNumber in the queue',
+                yourTurn
+                    ? yourTurnMessage
+                    : 'You are number $queueNumber in the queue',
                 style: TextStyle(fontSize: 24),
               ),
             ),
@@ -539,13 +550,13 @@ class _MyHomePageState extends State<MyHomePage> {
                 onPressed: () {
                   print("Cancel button pressed");
                   String data =
-                      '[{ "MessageType": "0400", "studentNumber": "$studentNumber"}]';
+                      '{ "messageType": "cancel", "studentNumber": "$studentNumber"}';
                   publishMessage(data);
                   setState(() {
+                    yourTurn = false;
                     inQueue = false;
                     ticketNumber = '';
                     queueNumber = '';
-                    receivedMessage = '';
                   });
                 },
                 icon: Icon(Icons.cancel),
