@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:class_question_queue/models/mqttData.dart';
 import 'package:class_question_queue/models/student.dart';
 import 'package:flutter/foundation.dart';
@@ -98,6 +99,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool inQueue = false;
   bool yourTurn = false;
   bool canceled = false;
+  bool awayFromDesk = false;
 
   late dynamic client;
 
@@ -189,8 +191,8 @@ class _MyHomePageState extends State<MyHomePage> {
     clientIdentifier = generateClientIdentifier();
 
     final willMessage = {
-      "clientIdentifier": clientIdentifier,
-      "message": "disconnected"
+      "messageType": 'cancel',
+      "studentNumber": studentNumber
     };
 
     final connMessage = MqttConnectMessage()
@@ -221,7 +223,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void onConnected() {
     print('Connected');
-    subscribeToFeed('$aioUsername/feeds/$aioFeedUpdate');
+    subscribeToFeed('$aioUsername/feeds/$aioFeedSubscribe');
   }
 
   void onDisconnected() {
@@ -297,6 +299,7 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           yourTurn = true;
         });
+        AudioPlayer().play(AssetSource('audio/notification.mp3'));
       }
 
       if (data.messageType == "update" && inQueue && myData != null) {
@@ -304,6 +307,7 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           ticketNumber = myData.ticketNumber;
           queueNumber = data.findStudentIndexByNumber(studentNumber);
+          awayFromDesk = data.awayFromDesk!;
         });
       } else if (data.messageType == "update" && inQueue && myData == null) {
         print('test2');
@@ -488,7 +492,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       // For now, just print the data
                       print('Question: $question');
                       String data =
-                          '{"messageType": "update", "queue": [{ "ticketNumber": "67", "question": "$question", "name": "$name", "studentNumber": "$studentNumber"}]}';
+                          '{"messageType": "add", "student": {"question": "$question", "name": "$name", "studentNumber": "$studentNumber"}}';
                       setState(() {
                         canceled = false;
                       });
@@ -542,6 +546,12 @@ class _MyHomePageState extends State<MyHomePage> {
                     : 'You are number $queueNumber in the queue',
                 style: TextStyle(fontSize: 24),
               ),
+            ),
+            Text(
+              awayFromDesk
+                  ? 'Your lecturer is not taking questions right now, please be patient.'
+                  : '',
+              style: const TextStyle(fontSize: 20, color: Colors.red),
             ),
             SizedBox(height: 16),
             Align(
