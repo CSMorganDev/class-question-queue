@@ -677,6 +677,34 @@ class _MyHomePageState extends State<MyHomePage> {
               style: const TextStyle(fontSize: 20, color: Colors.red),
             ),
             SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  if (yourTurn) {
+                    return;
+                  }
+                  print("Cancel button pressed");
+                  String data =
+                      '{ "messageType": "cancel", "studentNumber": "$studentNumber"}';
+                  publishMessage(data);
+                  setState(() {
+                    yourTurn = false;
+                    inQueue = false;
+                    ticketNumber = '';
+                    queueNumber = '';
+                  });
+                },
+                icon: Icon(Icons.cancel),
+                label: Text('Cancel question'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: yourTurn
+                      ? Theme.of(context).colorScheme.secondary
+                      : Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
           ],
         ),
       ),
