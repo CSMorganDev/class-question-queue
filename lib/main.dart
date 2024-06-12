@@ -11,6 +11,7 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:mqtt_client/mqtt_browser_client.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:math';
+import 'package:fluttertoast/fluttertoast.dart';
 
 void main() async {
   await dotenv.load(fileName: ".env");
@@ -57,7 +58,7 @@ class MyApp extends StatelessWidget {
             minimumSize: MaterialStateProperty.all<Size>(
                 const Size(double.infinity, 48.0)),
           ))),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'TAFE Class Queue'),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -85,6 +86,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final formKey = GlobalKey<FormState>();
   String? name;
   String? studentNumber;
+  int currentPageIndex = 0;
+  String appBarTitle = "Home";
   String? aioServer = dotenv.env['AIO_SERVER'];
   String? aioBrowserServer = dotenv.env['AIO_BROWSER_SERVER'];
   String? aioUsername = dotenv.env['AIO_USERNAME'];
@@ -149,26 +152,146 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Widget _buildScaffoldWithUser() {
+    final TextEditingController nameController =
+        TextEditingController(text: name);
+    final TextEditingController studentNumberController =
+        TextEditingController(text: studentNumber);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
-        title: const Text('Welcome'),
+        title: Text(appBarTitle),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Builder(builder: (context) {
-              print("In queue ? $inQueue");
-              if (inQueue) {
-                return _inQueueView();
-              } else {
-                return _notInQueueView();
-              }
-            }),
+      body: <Widget>[
+        SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Builder(builder: (context) {
+                  print("In queue ? $inQueue");
+                  if (inQueue) {
+                    return _inQueueView();
+                  } else {
+                    return _notInQueueView();
+                  }
+                }),
+              ),
+            ],
+          ),
+        ),
+        SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Card(
+                  child: Form(
+                    key: formKey,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: <Widget>[
+                          TextFormField(
+                            controller: nameController,
+                            decoration:
+                                const InputDecoration(labelText: 'Name'),
+                            validator: (value) {
+                              if (value!.isEmpty) {
+                                return 'Please enter your name';
+                              }
+                              return null;
+                            },
+                          ),
+                          TextFormField(
+                            controller: studentNumberController,
+                            decoration: const InputDecoration(
+                                labelText: 'Student Number'),
+                            validator: (value) {
+                              if (value!.isEmpty) {
+                                return 'Please enter your student number';
+                              }
+                              // You can add more complex validation logic here
+                              return null;
+                            },
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16.0),
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                if (inQueue) {
+                                  Fluttertoast.showToast(
+                                      msg:
+                                          "You cannot update your settings while you are in the queue",
+                                      toastLength: Toast.LENGTH_SHORT,
+                                      gravity: ToastGravity.CENTER,
+                                      timeInSecForIosWeb: 2,
+                                      backgroundColor: const Color.fromARGB(
+                                          255, 183, 58, 58),
+                                      textColor: Colors.white,
+                                      fontSize: 16.0);
+                                } else if (formKey.currentState!.validate()) {
+                                  formKey.currentState!.save();
+                                  // Process the form data here
+                                  await saveData('name', nameController.text);
+                                  await saveData('studentNumber',
+                                      studentNumberController.text);
+                                  setState(() {
+                                    name = nameController.text;
+                                    studentNumber =
+                                        studentNumberController.text;
+                                  });
+                                  Fluttertoast.showToast(
+                                      msg: "Settings updated!",
+                                      toastLength: Toast.LENGTH_SHORT,
+                                      gravity: ToastGravity.CENTER,
+                                      timeInSecForIosWeb: 2,
+                                      backgroundColor: const Color.fromARGB(
+                                          255, 183, 58, 58),
+                                      textColor: Colors.white,
+                                      fontSize: 16.0);
+                                  print('Name: $name');
+                                  print('Student Number: $studentNumber');
+                                }
+                              },
+                              child: const Text('Submit'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ][currentPageIndex],
+      bottomNavigationBar: NavigationBar(
+        onDestinationSelected: (int index) {
+          setState(() {
+            currentPageIndex = index;
+            appBarTitle = index == 1 ? "Settings" : "Home";
+          });
+        },
+        indicatorColor: const Color.fromARGB(255, 183, 58, 58),
+        selectedIndex: currentPageIndex,
+        destinations: const <Widget>[
+          NavigationDestination(
+            selectedIcon: Icon(Icons.home, color: Colors.white),
+            icon: Icon(Icons.home_outlined),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            selectedIcon: Icon(Icons.settings, color: Colors.white),
+            icon: Icon(Icons.settings_outlined),
+            label: 'Settings',
           ),
         ],
       ),
@@ -469,7 +592,7 @@ class _MyHomePageState extends State<MyHomePage> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
               TextFormField(
-                maxLines: 8,
+                maxLines: 3,
                 controller: questionController,
                 decoration: const InputDecoration(
                     labelText: 'Got a question?',
@@ -477,7 +600,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     border: OutlineInputBorder()),
                 validator: (value) {
                   if (value!.isEmpty) {
-                    return 'Please enter your name';
+                    return 'Please enter a valid question';
                   }
                   return null;
                 },
@@ -554,29 +677,6 @@ class _MyHomePageState extends State<MyHomePage> {
               style: const TextStyle(fontSize: 20, color: Colors.red),
             ),
             SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  print("Cancel button pressed");
-                  String data =
-                      '{ "messageType": "cancel", "studentNumber": "$studentNumber"}';
-                  publishMessage(data);
-                  setState(() {
-                    yourTurn = false;
-                    inQueue = false;
-                    ticketNumber = '';
-                    queueNumber = '';
-                  });
-                },
-                icon: Icon(Icons.cancel),
-                label: Text('Cancel question'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ),
           ],
         ),
       ),
