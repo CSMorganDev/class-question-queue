@@ -681,7 +681,7 @@ class _MyHomePageState extends State<MyHomePage> {
               alignment: Alignment.centerRight,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  if (!yourTurn) {
+                  if (yourTurn) {
                     return;
                   }
                   print("Cancel button pressed");
